@@ -82,7 +82,8 @@ export async function GET(request: Request) {
         (p: any) =>
             p.stickied && p.link_flair_text?.toLowerCase() === "daily workout",
     );
-    if (pinnedPosts.length === 0) return null;
+    if (pinnedPosts.length === 0)
+        return NextResponse.json({ error: "No data found" }, { status: 404 });
 
     const p = pinnedPosts[0];
 
@@ -121,7 +122,8 @@ export async function GET(request: Request) {
 
     const comment = workoutComments[0] ?? null;
 
-    if (!comment) return null;
+    if (!comment)
+        return NextResponse.json({ error: "No data found" }, { status: 404 });
 
     // return {
     //     id: bestWorkoutComment.id,
@@ -132,23 +134,39 @@ export async function GET(request: Request) {
     //     created_utc: bestWorkoutComment.created_utc,
     // };
 
-    await supabase.from("reddit_posts").upsert({
+    const { error: postError } = await supabase.from("reddit_posts").upsert({
         post_id: postId,
         title: postTitle,
         url: postUrl,
         created_utc: p.created_utc,
     });
 
-    await supabase.from("workout_comments").upsert({
-        comment_id: comment.id,
-        post_id: postId,
-        author: comment.author,
-        body: comment.body,
-        score: comment.score,
-        url: `https://www.reddit.com${comment.permalink}`,
-        workout_type: "2G",
-        created_utc: comment.created_utc,
-    });
+    const { error: commentError } = await supabase
+        .from("workout_comments")
+        .upsert({
+            comment_id: comment.id,
+            post_id: postId,
+            author: comment.author,
+            body: comment.body,
+            score: comment.score,
+            url: `https://www.reddit.com${comment.permalink}`,
+            workout_type: "2G",
+            created_utc: comment.created_utc,
+        });
+
+    if (postError) {
+        return NextResponse.json(
+            { error: postError.message || "Failed to upsert post" },
+            { status: 500 },
+        );
+    }
+
+    if (commentError) {
+        return NextResponse.json(
+            { error: commentError.message || "Failed to upsert comment" },
+            { status: 500 },
+        );
+    }
 
     return NextResponse.json({ ok: true });
 }
