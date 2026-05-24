@@ -63,11 +63,22 @@ function flattenComments(children: any[]): RedditComment[] {
 function isWorkoutIntelComment(comment: RedditComment) {
     const text = comment.body.toLowerCase();
 
-    return (
-        text.includes("2g") &&
-        (text.includes("tread") || text.includes("treadmill")) &&
-        text.includes("floor")
-    );
+    const hasWorkoutType =
+        text.includes("2g") ||
+        text.includes("3g") ||
+        text.includes("tread 50") ||
+        text.includes("t50") ||
+        text.includes("strength 50") ||
+        text.includes("s50");
+
+    const hasWorkoutContent =
+        text.includes("tread") ||
+        text.includes("treadmill") ||
+        text.includes("floor") ||
+        text.includes("rower") ||
+        text.includes("rowing");
+
+    return hasWorkoutType && hasWorkoutContent;
 }
 
 export async function GET(request: Request) {
@@ -140,27 +151,45 @@ export async function GET(request: Request) {
             )
             .sort((a, b) => b.score - a.score);
 
-        await supabase.from("reddit_posts").upsert({
-            post_id: postId,
-            title: postTitle,
-            url: postUrl,
-            flair: p.link_flair_text,
-            created_utc: p.created_utc,
-            updated_at: new Date().toISOString(),
-        });
-
-        for (const comment of workoutComments) {
-            await supabase.from("workout_comments").upsert({
-                comment_id: comment.id,
+        const { error: postError } = await supabase
+            .from("reddit_posts")
+            .upsert({
                 post_id: postId,
-                author: comment.author,
-                body: comment.body,
-                score: comment.score,
-                url: `https://www.reddit.com${comment.permalink}`,
-                workout_type: inferWorkoutType(comment.body),
-                created_utc: comment.created_utc,
+                title: postTitle,
+                url: postUrl,
+                flair: p.link_flair_text,
+                created_utc: p.created_utc,
                 updated_at: new Date().toISOString(),
             });
+
+        if (postError) {
+            return NextResponse.json(
+                { error: postError.message },
+                { status: 500 },
+            );
+        }
+
+        for (const comment of workoutComments) {
+            const { error: commentError } = await supabase
+                .from("workout_comments")
+                .upsert({
+                    comment_id: comment.id,
+                    post_id: postId,
+                    author: comment.author,
+                    body: comment.body,
+                    score: comment.score,
+                    url: `https://www.reddit.com${comment.permalink}`,
+                    workout_type: inferWorkoutType(comment.body),
+                    created_utc: comment.created_utc,
+                    updated_at: new Date().toISOString(),
+                });
+
+            if (commentError) {
+                return NextResponse.json(
+                    { error: commentError.message },
+                    { status: 500 },
+                );
+            }
 
             savedComments++;
         }
