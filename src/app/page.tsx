@@ -72,9 +72,13 @@ async function getLatestPost(): Promise<RedditPost | null> {
 
   if (error || !data) return null;
 
+  const redditPost = Array.isArray(data.reddit_posts)
+    ? data.reddit_posts[0]
+    : data.reddit_posts;
+
   return {
     id: data.comment_id,
-    title: data.reddit_posts.title,
+    title: redditPost?.title ?? "Workout Intel",
     selftext: data.body,
     url: data.url,
     author: data.author,
