@@ -1,0 +1,16 @@
+name: Ingest Reddit workouts
+
+on:
+    schedule:
+        - cron: "0 */4 * * *"
+    workflow_dispatch:
+
+jobs:
+    ingest:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Call ingest endpoint
+              run: |
+                  curl -f \
+                    -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+                    https://otf.ritviknag.com/api/ingest/reddit
