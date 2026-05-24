@@ -92,16 +92,30 @@ export async function GET(request: Request) {
     // Move your current Reddit fetch + flattenComments + filter logic here.
     // Then upsert into reddit_posts and workout_comments.
 
-    const res = await fetch("https://www.reddit.com/r/orangetheory.json", {
+    const res = await fetch("https://old.reddit.com/r/orangetheory.json", {
         headers: {
-            "User-Agent": "otf-intel:v0.1.0",
+            "User-Agent": "otf-intel:v0.1.0 by u/otf-intel",
+            Accept: "application/json",
         },
         cache: "no-store",
     });
 
     if (!res.ok) {
+        const body = await res.text();
+
+        console.error("Reddit subreddit fetch failed", {
+            status: res.status,
+            statusText: res.statusText,
+            body: body.slice(0, 500),
+        });
+
         return NextResponse.json(
-            { error: "Failed to fetch subreddit" },
+            {
+                error: "Failed to fetch subreddit",
+                status: res.status,
+                statusText: res.statusText,
+                body: body.slice(0, 300),
+            },
             { status: 502 },
         );
     }
@@ -127,10 +141,11 @@ export async function GET(request: Request) {
         const postUrl = p.url;
 
         const threadRes = await fetch(
-            `https://www.reddit.com/comments/${postId}/.json`,
+            `https://old.reddit.com/comments/${postId}/.json`,
             {
                 headers: {
-                    "User-Agent": "otf-intel:v0.1.0",
+                    "User-Agent": "otf-intel:v0.1.0 by u/otf-intel",
+                    Accept: "application/json",
                 },
                 cache: "no-store",
             },
