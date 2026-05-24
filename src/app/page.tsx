@@ -1,7 +1,6 @@
 import { getSupabaseServer } from "@/lib/supabase";
-import { parseWorkoutMarkdown } from "@/lib/workout-parser";
-import { WorkoutTabs } from "@/components/workout-tabs";
 
+import { WorkoutSelector } from "@/components/workout-selector";
 
 // import Link from "next/link";
 
@@ -24,16 +23,14 @@ import { WorkoutTabs } from "@/components/workout-tabs";
 //   );
 // }
 
-type RedditPost = {
-  id: string;
-  title: string;
-  selftext: string;
-  url: string;
-  author: string;
-  created_utc: number;
-};
-
-
+// type RedditPost = {
+//   id: string;
+//   title: string;
+//   selftext: string;
+//   url: string;
+//   author: string;
+//   created_utc: number;
+// };
 
 // async function getLatestPost(): Promise<RedditPost | null> {
 //   const baseUrl = process.env.VERCEL_URL
@@ -50,8 +47,10 @@ type RedditPost = {
 //   return data.post;
 // }
 
-async function getLatestPost(): Promise<RedditPost | null> {
+async function getRecentWorkouts() {
   const supabase = getSupabaseServer();
+
+  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
 
   const { data, error } = await supabase
     .from("workout_comments")
@@ -61,72 +60,46 @@ async function getLatestPost(): Promise<RedditPost | null> {
       body,
       score,
       url,
+      workout_type,
       created_utc,
       reddit_posts (
-        title
+        post_id,
+        title,
+        flair,
+        created_utc
       )
     `)
-    .order("created_utc", { ascending: false })
-    .limit(1)
-    .single();
+    .gte("created_utc", sevenDaysAgo)
+    .order("created_utc", { ascending: false });
 
-  if (error || !data) return null;
+  if (error || !data) return [];
 
-  const redditPost = Array.isArray(data.reddit_posts)
-    ? data.reddit_posts[0]
-    : data.reddit_posts;
+  return data.map((row) => {
+    const redditPost = Array.isArray(row.reddit_posts)
+      ? row.reddit_posts[0]
+      : row.reddit_posts;
 
-  return {
-    id: data.comment_id,
-    title: redditPost?.title ?? "Workout Intel",
-    selftext: data.body,
-    url: data.url,
-    author: data.author,
-    created_utc: data.created_utc,
-  };
+    return {
+      id: row.comment_id,
+      title: redditPost?.title ?? "Workout Intel",
+      selftext: row.body,
+      url: row.url,
+      author: row.author,
+      created_utc: row.created_utc,
+      workout_type: row.workout_type,
+      flair: redditPost?.flair,
+    };
+  });
 }
 
 export default async function Home() {
-  const post = await getLatestPost();
-
-  const workout = post
-    ? parseWorkoutMarkdown(post.title, post.selftext)
-    : null;
+  const workouts = await getRecentWorkouts();
 
   return (
     <main className="mx-auto max-w-5xl p-6">
-      <h1 className="text-3xl font-bold">
-        {workout?.title ?? "OTF Intel"}
-      </h1>
+      <p className="text-sm font-semibold text-orange-500">OTF Intel</p>
 
-      <p className="mt-2 text-gray-600">
-        Daily Orangetheory workout summaries from Reddit.
-      </p>
-
-      {!post || !workout ? (
-        <section className="mt-8 rounded-2xl border p-5 shadow-sm">
-          <p>No workout post found yet.</p>
-        </section>
-      ) : (
-        <>
-          <section className="mt-8 rounded-2xl border p-5 shadow-sm">
-            <p className="text-sm text-gray-500">
-              Source: u/{post.author}
-            </p>
-
-            <a
-              className="mt-2 inline-block underline"
-              href={post.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open Reddit comment
-            </a>
-          </section>
-
-          <WorkoutTabs tabs={workout.tabs} />
-        </>
-      )}
+      <WorkoutSelector workouts={workouts} /> 
     </main>
   );
 }

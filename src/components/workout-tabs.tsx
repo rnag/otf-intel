@@ -15,7 +15,7 @@ export function WorkoutTabs({ tabs }: Props) {
   const currentTab = tabs.find((tab) => tab.type === activeTab) ?? tabs[0];
 
   return (
-    <section className="mt-6">
+    <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex flex-wrap gap-2 border-b pb-3">
         {tabs.map((tab) => (
           <button

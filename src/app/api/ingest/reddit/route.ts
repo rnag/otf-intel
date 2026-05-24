@@ -12,6 +12,27 @@ type RedditComment = {
     depth: number;
 };
 
+function isTargetWorkoutPost(p: any) {
+    const flair = p.link_flair_text?.toLowerCase();
+
+    return (
+        p.stickied &&
+        (flair === "daily workout" || flair === "tomorrow's daily workout")
+    );
+}
+
+function inferWorkoutType(body: string) {
+    const text = body.toLowerCase();
+
+    if (text.includes("tread 50") || text.includes("t50")) return "Tread 50";
+    if (text.includes("strength 50") || text.includes("s50"))
+        return "Strength 50";
+    if (text.includes("3g")) return "3G";
+    if (text.includes("2g")) return "2G";
+
+    return "Unknown";
+}
+
 function flattenComments(children: any[]): RedditComment[] {
     const comments: RedditComment[] = [];
 
@@ -60,7 +81,7 @@ export async function GET(request: Request) {
     // Move your current Reddit fetch + flattenComments + filter logic here.
     // Then upsert into reddit_posts and workout_comments.
 
-    let res = await fetch("https://www.reddit.com/r/orangetheory.json", {
+    const res = await fetch("https://www.reddit.com/r/orangetheory.json", {
         headers: {
             "User-Agent": "otf-intel:v0.1.0",
         },
@@ -74,99 +95,80 @@ export async function GET(request: Request) {
         );
     }
 
-    let json = await res.json();
+    const json = await res.json();
 
     const posts = json.data.children.map((c: any) => c.data);
-    // TODO: 'Tomorrow's Daily Workout' too
-    const pinnedPosts = posts.filter(
-        (p: any) =>
-            p.stickied && p.link_flair_text?.toLowerCase() === "daily workout",
-    );
-    if (pinnedPosts.length === 0)
-        return NextResponse.json({ error: "No data found" }, { status: 404 });
 
-    const p = pinnedPosts[0];
+    const pinnedPosts = posts.filter(isTargetWorkoutPost);
 
-    const postTitle = p.title;
-    const postId = p.id;
-    const postUrl = p.url;
-
-    res = await fetch(`https://www.reddit.com/comments/${postId}/.json`, {
-        headers: {
-            "User-Agent": "otf-intel:v0.1.0",
-        },
-        cache: "no-store",
-    });
-
-    if (!res.ok) {
+    if (pinnedPosts.length === 0) {
         return NextResponse.json(
-            { error: "Failed to fetch post" },
-            { status: 502 },
+            { error: "No pinned workout posts found" },
+            { status: 404 },
         );
     }
 
-    json = await res.json();
+    let savedComments = 0;
 
-    const commentChildren = json[1]?.data?.children ?? [];
+    for (const p of pinnedPosts) {
+        const postId = p.id;
+        const postTitle = p.title;
+        const postUrl = p.url;
 
-    const comments = flattenComments(commentChildren);
+        const threadRes = await fetch(
+            `https://www.reddit.com/comments/${postId}/.json`,
+            {
+                headers: {
+                    "User-Agent": "otf-intel:v0.1.0",
+                },
+                cache: "no-store",
+            },
+        );
 
-    const workoutComments = comments
-        .filter(isWorkoutIntelComment)
-        .filter(
-            (comment) =>
-                comment.score >= 5 ||
-                comment.author.toLowerCase().startsWith("dc"),
-        )
-        .sort((a, b) => b.score - a.score);
+        if (!threadRes.ok) continue;
 
-    const comment = workoutComments[0] ?? null;
+        const threadJson = await threadRes.json();
+        const commentChildren = threadJson[1]?.data?.children ?? [];
+        const comments = flattenComments(commentChildren);
 
-    if (!comment)
-        return NextResponse.json({ error: "No data found" }, { status: 404 });
+        const workoutComments = comments
+            .filter(isWorkoutIntelComment)
+            .filter(
+                (comment) =>
+                    comment.score >= 5 ||
+                    comment.author.toLowerCase().startsWith("dc"),
+            )
+            .sort((a, b) => b.score - a.score);
 
-    // return {
-    //     id: bestWorkoutComment.id,
-    //     title: postTitle,
-    //     selftext: bestWorkoutComment.body,
-    //     url: `https://www.reddit.com${bestWorkoutComment.permalink}`,
-    //     author: bestWorkoutComment.author,
-    //     created_utc: bestWorkoutComment.created_utc,
-    // };
-
-    const { error: postError } = await supabase.from("reddit_posts").upsert({
-        post_id: postId,
-        title: postTitle,
-        url: postUrl,
-        created_utc: p.created_utc,
-    });
-
-    const { error: commentError } = await supabase
-        .from("workout_comments")
-        .upsert({
-            comment_id: comment.id,
+        await supabase.from("reddit_posts").upsert({
             post_id: postId,
-            author: comment.author,
-            body: comment.body,
-            score: comment.score,
-            url: `https://www.reddit.com${comment.permalink}`,
-            workout_type: "2G",
-            created_utc: comment.created_utc,
+            title: postTitle,
+            url: postUrl,
+            flair: p.link_flair_text,
+            created_utc: p.created_utc,
+            updated_at: new Date().toISOString(),
         });
 
-    if (postError) {
-        return NextResponse.json(
-            { error: postError.message || "Failed to upsert post" },
-            { status: 500 },
-        );
+        for (const comment of workoutComments) {
+            await supabase.from("workout_comments").upsert({
+                comment_id: comment.id,
+                post_id: postId,
+                author: comment.author,
+                body: comment.body,
+                score: comment.score,
+                url: `https://www.reddit.com${comment.permalink}`,
+                workout_type: inferWorkoutType(comment.body),
+                created_utc: comment.created_utc,
+                updated_at: new Date().toISOString(),
+            });
+
+            savedComments++;
+        }
     }
 
-    if (commentError) {
-        return NextResponse.json(
-            { error: commentError.message || "Failed to upsert comment" },
-            { status: 500 },
-        );
-    }
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+        ok: true,
+        posts: pinnedPosts.length,
+        comments: savedComments,
+    });
 }
