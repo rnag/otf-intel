@@ -6,6 +6,8 @@ import { WorkoutTabs } from "@/components/workout-tabs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const PREFERRED_WORKOUT_TYPE_KEY = "otf-preferred-workout-type";
+
 type WorkoutPost = {
   id: string;
   title: string;
@@ -24,6 +26,26 @@ type Props = {
 
 function getDateLabel(title: string) {
   return title.match(/for\s+(.+)$/i)?.[1]?.trim() ?? "Unknown date";
+}
+
+function normalizeWorkoutType(type?: string) {
+  return type?.toLowerCase().replace(/\s+/g, " ").trim() ?? "";
+}
+
+function pickPreferredWorkout(
+  workouts: WorkoutPost[],
+  preferredType?: string | null,
+) {
+  const normalizedPreferred = normalizeWorkoutType(preferredType!);
+
+  return (
+    workouts.find(
+      (workout) =>
+        normalizeWorkoutType(workout.workout_type) === normalizedPreferred,
+    ) ??
+    workouts.find((workout) => normalizeWorkoutType(workout.workout_type) === "2g") ??
+    workouts[0]
+  );
 }
 
 function WorkoutQuickSummary({
@@ -119,13 +141,19 @@ export function WorkoutSelector({ workouts }: Props) {
   }, [workouts]);
 
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
-  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+
+  const [preferredWorkoutType, setPreferredWorkoutType] = useState<string | null>(
+    () =>
+      typeof window !== "undefined"
+        ? localStorage.getItem(PREFERRED_WORKOUT_TYPE_KEY)
+        : null,
+  );
 
   const selectedDateGroup = groupedByDate[selectedDateIndex];
 
-  const selected =
-    selectedDateGroup?.items.find((item) => item.id === selectedWorkoutId) ??
-    selectedDateGroup?.items[0];
+  const selected = selectedDateGroup
+    ? pickPreferredWorkout(selectedDateGroup.items, preferredWorkoutType)
+    : undefined;
 
   function goPrevious() {
     setSelectedDateIndex((current) =>
@@ -204,7 +232,12 @@ export function WorkoutSelector({ workouts }: Props) {
             return (
             <button
                 key={workout.id}
-                onClick={() => setSelectedWorkoutId(workout.id)}
+                onClick={() => {
+                    const type = workout.workout_type ?? "Workout";
+
+                    setPreferredWorkoutType(type);
+                    localStorage.setItem(PREFERRED_WORKOUT_TYPE_KEY, type);
+                }}
                 className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all duration-150 ${
                 isSelected
                     ? "bg-orange-500 text-white shadow-sm"
