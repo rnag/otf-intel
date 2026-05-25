@@ -64,6 +64,10 @@ function isRecoveryText(text: string) {
     return /\b(?:\d+:\d+|\d+\s*sec|\d+\s*min)\s+(?:WR|recovery)\b/i.test(text);
 }
 
+function isTransitionText(text: string) {
+    return /\b(?:\d+:\d+|\d+\s*sec|\d+\s*min)\b.*\btransition\b/i.test(text);
+}
+
 function splitBlockContentAndCommentary(content: string) {
     const parts = content.split(/\n{2,}/);
 
@@ -363,8 +367,8 @@ export function parseWorkoutMarkdown(
               : null;
 
     const sectionRegex = defaultTab
-        ? /(?:^|\n)\s*(?:\*\*)?((?:(?:Tread|Treadmill|Floor|Rower|Row)\s+)?Block\s+\d+\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi
-        : /(?:^|\n)\s*(?:\*\*)?((?:Tread|Treadmill|Floor|Rower|Row)\s+Block\s+\d+\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi;
+        ? /(?:^|\n)\s*(?:\*\*)?((?:(?:Tread|Treadmill|Floor|Rower|Row)\s+)?Block(?:\s+\d+)?\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi
+        : /(?:^|\n)\s*(?:\*\*)?((?:Tread|Treadmill|Floor|Rower|Row)\s+Block(?:\s+\d+)?\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi;
 
     const matches = [...bodyWithoutCommentary.matchAll(sectionRegex)];
 
@@ -402,7 +406,7 @@ export function parseWorkoutMarkdown(
         const cleanedContent = cleanBlockContentStart(contentWithoutHeader);
 
         const recoveryMatch = cleanedContent.match(
-            /(?:\n{2,})(.*\b(?:\d+:\d+|\d+\s*sec|\d+\s*min)\s+(?:WR|recovery)\b.*)$/i,
+            /(?:\n{2,})(.*\b(?:\d+:\d+|\d+\s*sec|\d+\s*min)\b.*\b(?:WR|recovery|transition)\b.*)$/i,
         );
 
         const mainContent = recoveryMatch
@@ -416,11 +420,18 @@ export function parseWorkoutMarkdown(
             content: mainContent,
         });
 
-        if (recoveryContent && isRecoveryText(recoveryContent)) {
-            tabs[type].blocks.push({
-                title: "WR",
-                content: recoveryContent,
-            });
+        if (recoveryContent) {
+            if (isRecoveryText(recoveryContent)) {
+                tabs[type].blocks.push({
+                    title: "WR",
+                    content: recoveryContent,
+                });
+            } else if (isTransitionText(recoveryContent)) {
+                tabs[type].blocks.push({
+                    title: "Transition",
+                    content: recoveryContent,
+                });
+            }
         }
     }
 

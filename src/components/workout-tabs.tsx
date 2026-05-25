@@ -48,10 +48,13 @@ export function WorkoutTabs({ tabs }: Props) {
 
       <div className="mt-6 grid min-w-0 gap-4">
         {currentTab.blocks.map((block, index) => {
+          const cleanedContent = stripMarkdown(block.content);
+
           const isRecoveryBlock =
             block.title === "WR" ||
-            /^\s*(?:\d+:\d+|\d+\s*sec|\d+\s*min)\s+(?:WR|recovery)\b/i.test(
-              stripMarkdown(block.content),
+            block.title === "Transition" ||
+            /^\s*(?:\d+:\d+|\d+\s*sec|\d+\s*min)\b.*\b(?:WR|recovery|transition)\b/i.test(
+              cleanedContent,
             );
 
           if (isRecoveryBlock) {
@@ -60,7 +63,7 @@ export function WorkoutTabs({ tabs }: Props) {
                 <div className="flex max-w-full items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
                   <span className="text-emerald-600 dark:text-emerald-300">↓</span>
                   <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold text-white">
-                    WR
+                    {block.title === "Transition" ? "Move" : "WR"}
                   </span>
                   <span className="min-w-0 break-words">{stripMarkdown(block.content)}</span>
                   <span className="text-emerald-600 dark:text-emerald-300">↓</span>
