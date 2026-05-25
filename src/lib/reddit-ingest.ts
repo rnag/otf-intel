@@ -16,19 +16,23 @@ function isTargetWorkoutPost(p: any) {
     const flair = p.link_flair_text?.toLowerCase();
 
     return (
-        p.stickied &&
-        (flair === "daily workout" || flair === "tomorrow's daily workout")
+        (p.stickied && flair === "daily workout") ||
+        flair === "tomorrow's daily workout"
     );
 }
 
 function inferWorkoutType(body: string) {
     const text = body.toLowerCase();
 
-    if (text.includes("tread 50") || text.includes("t50")) return "Tread 50";
-    if (text.includes("strength 50") || text.includes("s50"))
-        return "Strength 50";
-    if (text.includes("3g")) return "3G";
-    if (text.includes("2g")) return "2G";
+    const isHybrid = text.includes("hybrid") || text.includes("hyrox");
+
+    if (/\btread\s*50\b|\bt50\b/.test(text)) return "Tread 50";
+
+    if (/\bstrength\s*50\b|\bs50\b/.test(text)) return "Strength 50";
+
+    if (/\b3g\b/.test(text)) return isHybrid ? "H3G" : "3G";
+
+    if (/\b2g\b/.test(text)) return isHybrid ? "H2G" : "2G";
 
     return "Unknown";
 }
