@@ -21,7 +21,13 @@ type Props = {
   workouts: WorkoutPost[];
 };
 
-function WorkoutQuickSummary({ markdown }: { markdown: string }) {
+function WorkoutQuickSummary({
+  markdown,
+  workoutType,
+}: {
+  markdown: string;
+  workoutType?: string;
+}) {
   const text = markdown.toLowerCase();
 
   const benchmarkPatterns = [
@@ -60,6 +66,10 @@ function WorkoutQuickSummary({ markdown }: { markdown: string }) {
       ? "Upper-body leaning floor"
       : "Mixed floor";
 
+  const normalizedType = workoutType?.toLowerCase();
+  const isTreadOnly = normalizedType === "tread 50";
+  const isStrengthOnly = normalizedType === "strength 50";
+
   return (
     <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
     {hasBenchmark && (
@@ -69,15 +79,20 @@ function WorkoutQuickSummary({ markdown }: { markdown: string }) {
     </div>
     )}
 
-      <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
+    {!isStrengthOnly && (
+    <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
         <p className="font-semibold">Tread</p>
         <p>{treadType}</p>
-      </div>
+    </div>
+    )}
 
-      <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
+    {!isTreadOnly && (
+    <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
         <p className="font-semibold">Floor</p>
         <p>{floorType}</p>
-      </div>
+    </div>
+    )}
+
     </div>
   );
 }
@@ -91,7 +106,7 @@ export function WorkoutSelector({ workouts }: Props) {
     return <p>No workout post found yet.</p>;
   }
 
-  const parsed = parseWorkoutMarkdown(selected.title, selected.selftext);
+  const parsed = parseWorkoutMarkdown(selected.title, selected.selftext, selected.workout_type);
 
   return (
     <>
@@ -123,7 +138,10 @@ export function WorkoutSelector({ workouts }: Props) {
       <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <h1 className="text-3xl font-bold">{parsed.title}</h1>
 
-        <WorkoutQuickSummary markdown={selected.selftext} />
+        <WorkoutQuickSummary
+        markdown={selected.selftext}
+        workoutType={selected.workout_type}
+        />
 
         <p className="mt-4 text-xs text-gray-400">
           Source: u/{selected.author}

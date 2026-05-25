@@ -152,6 +152,7 @@ function parseSimpleSections(body: string): WorkoutTab[] {
 export function parseWorkoutMarkdown(
     postTitle: string,
     commentBody: string,
+    workoutType?: string,
 ): ParsedWorkout {
     const dateMatch = postTitle.match(/for\s+(.+)$/i);
     const dateLabel = dateMatch?.[1]?.trim() ?? "";
@@ -168,13 +169,49 @@ export function parseWorkoutMarkdown(
             .trim(),
     );
 
+    const normalizedType = workoutType?.toLowerCase();
+
+    if (normalizedType === "tread 50") {
+        return {
+            title: dateLabel ? `Tread 50 for ${dateLabel}` : "Tread 50",
+            dateLabel,
+            tabs: [
+                {
+                    type: "tread",
+                    label: "Tread",
+                    blocks: [
+                        {
+                            title: "Tread 50",
+                            content: body,
+                        },
+                    ],
+                },
+            ],
+        };
+    }
+
+    if (normalizedType === "strength 50") {
+        return {
+            title: dateLabel ? `Strength 50 for ${dateLabel}` : "Strength 50",
+            dateLabel,
+            tabs: [
+                {
+                    type: "floor",
+                    label: "Floor",
+                    blocks: [
+                        {
+                            title: "Strength 50",
+                            content: body,
+                        },
+                    ],
+                },
+            ],
+        };
+    }
+
     const commentaryMatch = body.match(
         /(?:^|\n)(?:[A-Za-z0-9_ -]*\s*)?commentary:\s*([\s\S]*)$/i,
     );
-
-    const commentaryText = commentaryMatch?.[1]
-        ? cleanSpoilerGarbage(commentaryMatch[1])
-        : "";
 
     const bodyWithoutCommentary = commentaryMatch
         ? body.slice(0, commentaryMatch.index).trim()
@@ -231,22 +268,6 @@ export function parseWorkoutMarkdown(
             });
         }
     }
-
-    const lastBlockEnd =
-        matches.length > 0
-            ? (matches[matches.length - 1].index ?? 0) +
-              matches[matches.length - 1][0].length
-            : -1;
-
-    const trailingText =
-        matches.length > 0
-            ? body.slice(
-                  matches[matches.length - 1].index! +
-                      body
-                          .slice(matches[matches.length - 1].index!)
-                          .indexOf(matches[matches.length - 1][0]),
-              )
-            : body;
 
     if (commentaryMatch?.[1]) {
         tabs.commentary.blocks.push({
