@@ -88,6 +88,67 @@ function splitBlockContentAndCommentary(content: string) {
     };
 }
 
+function parseSimpleSections(body: string): WorkoutTab[] {
+    const tabs: Record<WorkoutTabType, WorkoutTab> = {
+        overview: { type: "overview", label: "Overview", blocks: [] },
+        tread: { type: "tread", label: "Tread", blocks: [] },
+        floor: { type: "floor", label: "Floor", blocks: [] },
+        rower: { type: "rower", label: "Rower", blocks: [] },
+        commentary: { type: "commentary", label: "Commentary", blocks: [] },
+    };
+
+    const sectionRegex =
+        /(?:^|\n)\s*(?:\*\*)?(Tread|Treadmill|Rower|Row|Floor)(?:\*\*)?\s*[:-]\s*/gi;
+
+    const matches = [...body.matchAll(sectionRegex)];
+
+    if (matches.length === 0) {
+        return [];
+    }
+
+    const firstIndex = matches[0].index ?? 0;
+
+    const overview = body.slice(0, firstIndex).trim();
+    if (overview) {
+        tabs.overview.blocks.push({
+            title: "Overview",
+            content: overview,
+        });
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        const start = match.index ?? 0;
+        const contentStart = start + match[0].length;
+        const end = matches[i + 1]?.index ?? body.length;
+
+        const label = match[1].toLowerCase();
+        const content = body.slice(contentStart, end).trim();
+
+        const type: WorkoutTabType = label.includes("tread")
+            ? "tread"
+            : label.includes("row")
+              ? "rower"
+              : label.includes("floor")
+                ? "floor"
+                : "commentary";
+
+        tabs[type].blocks.push({
+            title:
+                type === "tread"
+                    ? "Tread"
+                    : type === "rower"
+                      ? "Rower"
+                      : type === "floor"
+                        ? "Floor"
+                        : "Notes",
+            content,
+        });
+    }
+
+    return Object.values(tabs).filter((tab) => tab.blocks.length > 0);
+}
+
 export function parseWorkoutMarkdown(
     postTitle: string,
     commentBody: string,
@@ -216,9 +277,15 @@ export function parseWorkoutMarkdown(
     //     }
     // }
 
+    let finalTabs = Object.values(tabs).filter((tab) => tab.blocks.length > 0);
+
+    if (finalTabs.length === 0) {
+        finalTabs = parseSimpleSections(body);
+    }
+
     return {
         title,
         dateLabel,
-        tabs: Object.values(tabs).filter((tab) => tab.blocks.length > 0),
+        tabs: finalTabs,
     };
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { parseWorkoutMarkdown } from "@/lib/workout-parser";
 import { WorkoutTabs } from "@/components/workout-tabs";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type WorkoutPost = {
   id: string;
@@ -22,27 +24,27 @@ type Props = {
 function WorkoutQuickSummary({ markdown }: { markdown: string }) {
   const text = markdown.toLowerCase();
 
-    const benchmarkKeywords = [
-    "benchmark",
-    "signature workout",
-    "inferno",
-    "catch me if you can",
-    "cmiyc",
-    "12 minute run for distance",
-    "12 minute rfd",
-    "1 mile",
-    "2000m row",
-    "500m row",
-    "200 meter row",
-    "200m row",
-    "dri tri",
-    "everest",
-    "orange infinity",
-    ];
+  const benchmarkPatterns = [
+    /\bbenchmark\b/,
+    /\bsignature workout\b/,
+    /\binferno\b/,
+    /\bcatch me if you can\b/,
+    /\bcmiyc\b/,
+    /\b12\s*minute\s+run\s+for\s+distance\b/,
+    /\b12\s*minute\s+rfd\b/,
+    /(?<![\d.])\b1[\s-]*mile\b/,
+    /\bquarter\s*mile\b/,
+    /\b0.25\s*mile\s+benchmark\b/,
+    /\b2000m\s+row\b/,
+    /\b500m\s+row\b/,
+    /\b200\s*meter\s+row\b/,
+    /\b200m\s+row\b/,
+    /\bdri\s*tri\b/,
+    /\beverest\b/,
+    /\borange infinity\b/,
+  ];
 
-    const hasBenchmark = benchmarkKeywords.some((keyword) =>
-    text.includes(keyword),
-    );
+  const hasBenchmark = benchmarkPatterns.some((pattern) => pattern.test(text));
 
   const treadType = text.includes("incline")
     ? "Incline / strength-focused tread"
@@ -128,7 +130,19 @@ export function WorkoutSelector({ workouts }: Props) {
         </p>
       </section>
 
-      <WorkoutTabs tabs={parsed.tabs} />
+        {parsed.tabs.length > 0 ? (
+        <WorkoutTabs tabs={parsed.tabs} />
+        ) : (
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <h2 className="text-xl font-semibold">Raw workout text</h2>
+            <div className="prose prose-sm mt-4 max-w-none dark:prose-invert">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {selected.selftext}
+            </ReactMarkdown>
+            </div>
+        </section>
+        )}
+
     </>
   );
 }

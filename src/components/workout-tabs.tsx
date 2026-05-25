@@ -10,9 +10,16 @@ type Props = {
 };
 
 export function WorkoutTabs({ tabs }: Props) {
+  if (!tabs.length) {
+    return null;
+  }
+  
   const [activeTab, setActiveTab] = useState(tabs[0]?.type ?? "overview");
 
   const currentTab = tabs.find((tab) => tab.type === activeTab) ?? tabs[0];
+  if (!currentTab) {
+    return null;
+  }
 
   return (
     <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
