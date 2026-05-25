@@ -201,7 +201,7 @@ export function WorkoutSelector({ workouts }: Props) {
         </button>
 
 
-        <div className="flex w-50 items-center justify-center gap-2 rounded-xl border border-zinc-300 px-5 py-2 font-semibold text-zinc-900 dark:border-zinc-700 dark:text-white sm:w-55">
+        <div className="flex min-w-[14.5rem] max-w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 px-4 py-2 font-semibold text-zinc-900 dark:border-zinc-700 dark:text-white">
         <span className="truncate">{selectedDateGroup.dateLabel}</span>
 
         <a
