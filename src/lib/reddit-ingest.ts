@@ -1,4 +1,5 @@
 import { getSupabaseServer } from "./supabase";
+// import fs from "node:fs/promises";
 
 type RedditComment = {
     id: string;
@@ -107,11 +108,21 @@ export async function ingestRedditWorkouts() {
     const supabase = getSupabaseServer();
 
     const subredditJson = await fetchJson(
-        "https://old.reddit.com/r/orangetheory.json",
+        "https://www.reddit.com/r/orangetheory.json",
     );
+
+    // await fs.writeFile(
+    //     `subreddit.json`,
+    //     JSON.stringify(subredditJson, null, 2),
+    // );
 
     const posts = subredditJson.data.children.map((c: any) => c.data);
     const pinnedPosts = posts.filter(isTargetWorkoutPost);
+
+    // await fs.writeFile(
+    //     `pinnedPosts.json`,
+    //     JSON.stringify(pinnedPosts, null, 2),
+    // );
 
     let savedComments = 0;
 
@@ -121,8 +132,13 @@ export async function ingestRedditWorkouts() {
         const postUrl = p.url;
 
         const threadJson = await fetchJson(
-            `https://old.reddit.com/comments/${postId}/.json`,
+            `https://www.reddit.com/comments/${postId}/.json`,
         );
+
+        // await fs.writeFile(
+        //     `${postId}-comments.json`,
+        //     JSON.stringify(threadJson, null, 2),
+        // );
 
         const commentChildren = threadJson[1]?.data?.children ?? [];
         const comments = flattenComments(commentChildren);
@@ -173,6 +189,11 @@ export async function ingestRedditWorkouts() {
             savedComments++;
         }
     }
+
+    console.log({
+        pinnedPosts: pinnedPosts.length,
+        savedComments,
+    });
 
     return {
         ok: true,
