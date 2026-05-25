@@ -10,7 +10,8 @@ type WorkoutPost = {
   id: string;
   title: string;
   selftext: string;
-  url: string;
+  url: string; // comment URL
+  post_url?: string; // post URL
   author: string;
   created_utc: number;
   workout_type?: string;
@@ -156,72 +157,102 @@ export function WorkoutSelector({ workouts }: Props) {
     selected.workout_type,
   );
 
+  const redditPostUrl = selected.post_url ?? selected.url;
+
+
+
   return (
-    <>
-      <div className="mt-6 flex items-center justify-center gap-4">
+    <div className="mx-auto w-full max-w-3xl min-w-0">
+        <div className="mt-6 flex items-center justify-center gap-4">
         <button
-          onClick={goPrevious}
-          disabled={selectedDateIndex >= groupedByDate.length - 1}
-          className="rounded-full border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={goPrevious}
+            disabled={selectedDateIndex >= groupedByDate.length - 1}
+            className="shrink-0 rounded-full border px-3 py-2 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-zinc-900"
         >
-          ←
+            ←
         </button>
 
-        <button className="rounded-xl border px-5 py-2 font-semibold">
-          {selectedDateGroup.dateLabel}
-        </button>
+
+        <div className="flex w-50 items-center justify-center gap-2 rounded-xl border border-zinc-300 px-5 py-2 font-semibold text-zinc-900 dark:border-zinc-700 dark:text-white sm:w-55">
+        <span className="truncate">{selectedDateGroup.dateLabel}</span>
+
+        <a
+            href={redditPostUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-zinc-400 transition hover:text-orange-500"
+            aria-label="Open Reddit post"
+        >
+            ↗
+        </a>
+        </div>
 
         <button
-          onClick={goNext}
-          disabled={selectedDateIndex <= 0}
-          className="rounded-full border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={goNext}
+            disabled={selectedDateIndex <= 0}
+            className="shrink-0 rounded-full border px-3 py-2 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-zinc-900"
         >
-          →
+            →
         </button>
-      </div>
+        </div>
 
-    {selectedDateGroup.items.map((workout) => {
-    const type = workout.workout_type ?? "Workout";
-    const isSelected = workout.id === selected?.id;
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        {selectedDateGroup.items.map((workout) => {
+            const type = workout.workout_type ?? "Workout";
+            const isSelected = workout.id === selected?.id;
 
-    return (
-        <button
-        key={workout.id}
-        onClick={() => setSelectedWorkoutId(workout.id)}
-        className={`rounded-full px-4 py-2 text-sm ${
-            isSelected
-            ? "bg-orange-500 text-white"
-            : "bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-        }`}
-        >
-        {type}
-        </button>
-    );
-    })}
+            return (
+            <button
+                key={workout.id}
+                onClick={() => setSelectedWorkoutId(workout.id)}
+                className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all duration-150 ${
+                isSelected
+                    ? "bg-orange-500 text-white shadow-sm"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                }`}
+            >
+                {type}
+            </button>
+            );
+        })}
+        </div>
 
-      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h1 className="text-3xl font-bold">{parsed.title}</h1>
+        <section className="mt-6 min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h1 className="break-words text-3xl font-bold">
+            {parsed.title}
+        </h1>
 
         <WorkoutQuickSummary
-          markdown={selected.selftext}
-          workoutType={selected.workout_type}
+            markdown={selected.selftext}
+            workoutType={selected.workout_type}
         />
 
-        <p className="mt-4 text-xs text-gray-400">Source: u/{selected.author}</p>
-      </section>
-
-      {parsed.tabs.length > 0 ? (
-        <WorkoutTabs tabs={parsed.tabs} />
-      ) : (
-        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <h2 className="text-xl font-semibold">Raw workout text</h2>
-          <div className="prose prose-sm mt-4 max-w-none dark:prose-invert">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {selected.selftext}
-            </ReactMarkdown>
-          </div>
+        <p className="mt-4 text-xs text-gray-400">
+            Source:{" "}
+            <a
+                href={selected.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline-offset-2 hover:underline"
+            >
+                u/{selected.author} ↗
+            </a>
+        </p>
         </section>
-      )}
-    </>
-  );
+
+        {parsed.tabs.length > 0 ? (
+        <WorkoutTabs tabs={parsed.tabs} />
+        ) : (
+        <section className="mt-6 min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <h2 className="text-xl font-semibold">Raw workout text</h2>
+
+            <div className="prose prose-sm mt-4 max-w-none overflow-hidden break-words dark:prose-invert prose-pre:overflow-x-auto">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {selected.selftext}
+            </ReactMarkdown>
+            </div>
+        </section>
+        )}
+    </div>
+   );
 }

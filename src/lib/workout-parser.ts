@@ -60,6 +60,10 @@ function cleanBlockContentStart(content: string) {
         .trim();
 }
 
+function isRecoveryText(text: string) {
+    return /\b(?:\d+:\d+|\d+\s*sec|\d+\s*min)\s+(?:WR|recovery)\b/i.test(text);
+}
+
 function splitBlockContentAndCommentary(content: string) {
     const parts = content.split(/\n{2,}/);
 
@@ -305,43 +309,43 @@ export function parseWorkoutMarkdown(
 
     const normalizedType = workoutType?.toLowerCase();
 
-    if (normalizedType === "tread 50") {
-        return {
-            title: "Tread 50",
-            dateLabel,
-            tabs: [
-                {
-                    type: "tread",
-                    label: "Tread",
-                    blocks: [
-                        {
-                            title: "Tread 50",
-                            content: body,
-                        },
-                    ],
-                },
-            ],
-        };
-    }
+    // if (normalizedType === "tread 50") {
+    //     return {
+    //         title: "Tread 50",
+    //         dateLabel,
+    //         tabs: [
+    //             {
+    //                 type: "tread",
+    //                 label: "Tread",
+    //                 blocks: [
+    //                     {
+    //                         title: "Tread 50",
+    //                         content: body,
+    //                     },
+    //                 ],
+    //             },
+    //         ],
+    //     };
+    // }
 
-    if (normalizedType === "strength 50") {
-        return {
-            title: "Strength 50",
-            dateLabel,
-            tabs: [
-                {
-                    type: "floor",
-                    label: "Floor",
-                    blocks: [
-                        {
-                            title: "Strength 50",
-                            content: body,
-                        },
-                    ],
-                },
-            ],
-        };
-    }
+    // if (normalizedType === "strength 50") {
+    //     return {
+    //         title: "Strength 50",
+    //         dateLabel,
+    //         tabs: [
+    //             {
+    //                 type: "floor",
+    //                 label: "Floor",
+    //                 blocks: [
+    //                     {
+    //                         title: "Strength 50",
+    //                         content: body,
+    //                     },
+    //                 ],
+    //             },
+    //         ],
+    //     };
+    // }
 
     const commentaryMatch = body.match(
         /(?:^|\n)(?:[A-Za-z0-9_ -]*\s*)?commentary:\s*([\s\S]*)$/i,
@@ -351,8 +355,16 @@ export function parseWorkoutMarkdown(
         ? body.slice(0, commentaryMatch.index).trim()
         : body;
 
-    const sectionRegex =
-        /(?:^|\n)\s*(?:\*\*)?((?:Tread|Treadmill|Floor|Rower|Row)\s+Block\s+\d+\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi;
+    const defaultTab: Pick<WorkoutTab, "type" | "label"> | null =
+        normalizedType === "tread 50"
+            ? { type: "tread", label: "Tread" }
+            : normalizedType === "strength 50"
+              ? { type: "floor", label: "Floor" }
+              : null;
+
+    const sectionRegex = defaultTab
+        ? /(?:^|\n)\s*(?:\*\*)?((?:(?:Tread|Treadmill|Floor|Rower|Row)\s+)?Block\s+\d+\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi
+        : /(?:^|\n)\s*(?:\*\*)?((?:Tread|Treadmill|Floor|Rower|Row)\s+Block\s+\d+\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi;
 
     const matches = [...bodyWithoutCommentary.matchAll(sectionRegex)];
 
@@ -381,16 +393,35 @@ export function parseWorkoutMarkdown(
         const blockTitle = match[1].trim();
         const rawContent = bodyWithoutCommentary.slice(start, end).trim();
 
-        const type = detectBlockType(blockTitle);
+        const type = defaultTab ? defaultTab.type : detectBlockType(blockTitle);
         const contentWithoutHeader = removeDuplicateHeader(
             rawContent,
             blockTitle,
         );
 
+        const cleanedContent = cleanBlockContentStart(contentWithoutHeader);
+
+        const recoveryMatch = cleanedContent.match(
+            /(?:\n{2,})(.*\b(?:\d+:\d+|\d+\s*sec|\d+\s*min)\s+(?:WR|recovery)\b.*)$/i,
+        );
+
+        const mainContent = recoveryMatch
+            ? cleanedContent.slice(0, recoveryMatch.index).trim()
+            : cleanedContent;
+
+        const recoveryContent = recoveryMatch?.[1]?.trim();
+
         tabs[type].blocks.push({
             title: blockTitle,
-            content: cleanBlockContentStart(contentWithoutHeader),
+            content: mainContent,
         });
+
+        if (recoveryContent && isRecoveryText(recoveryContent)) {
+            tabs[type].blocks.push({
+                title: "WR",
+                content: recoveryContent,
+            });
+        }
     }
 
     if (commentaryMatch?.[1]) {
@@ -434,6 +465,28 @@ export function parseWorkoutMarkdown(
         if (simpleTabs.length > 0) {
             finalTabs = simpleTabs;
         }
+    }
+
+    if (finalTabs.length > 0 && defaultTab) {
+        const blocks = finalTabs.flatMap((tab) => tab.blocks);
+
+        return {
+            title: workoutType!,
+            dateLabel,
+            tabs: [
+                {
+                    type: defaultTab.type,
+                    label: defaultTab.label,
+                    blocks: blocks.map((block) => ({
+                        ...block,
+                        title: block.title.replace(
+                            /^Block/i,
+                            `${defaultTab.label} Block`,
+                        ),
+                    })),
+                },
+            ],
+        };
     }
 
     return {

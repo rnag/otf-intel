@@ -1,5 +1,5 @@
 import { getSupabaseServer } from "@/lib/supabase";
-
+import { Star, ExternalLink } from "lucide-react";
 import { WorkoutSelector } from "@/components/workout-selector";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +68,7 @@ async function getRecentWorkouts() {
       reddit_posts (
         post_id,
         title,
+        url,
         flair,
         created_utc
       )
@@ -87,6 +88,7 @@ async function getRecentWorkouts() {
       title: redditPost?.title ?? "Workout Intel",
       selftext: row.body,
       url: row.url,
+      post_url: redditPost?.url,
       author: row.author,
       created_utc: row.created_utc,
       workout_type: row.workout_type,
@@ -99,8 +101,20 @@ export default async function Home() {
   const workouts = await getRecentWorkouts();
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm font-semibold text-orange-500">OTF Intel</p>
+    <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-orange-500">OTF Intel</p>
+
+        <a
+          href="https://github.com/rnag/otf-intel"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        >
+          <span className="text-sm">GitHub</span>
+          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+        </a>
+      </div>
 
       <WorkoutSelector workouts={workouts} /> 
     </main>
