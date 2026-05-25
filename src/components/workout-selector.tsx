@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { parseWorkoutMarkdown } from "@/lib/workout-parser";
 import { WorkoutTabs } from "@/components/workout-tabs";
 import ReactMarkdown from "react-markdown";
@@ -20,6 +20,10 @@ type WorkoutPost = {
 type Props = {
   workouts: WorkoutPost[];
 };
+
+function getDateLabel(title: string) {
+  return title.match(/for\s+(.+)$/i)?.[1]?.trim() ?? "Unknown date";
+}
 
 function WorkoutQuickSummary({
   markdown,
@@ -72,95 +76,152 @@ function WorkoutQuickSummary({
 
   return (
     <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-    {hasBenchmark && (
-    <div className="rounded-xl bg-orange-100 p-3 text-gray-900 dark:bg-orange-950 dark:text-orange-100">
-        <p className="font-semibold">Benchmark</p>
-        <p>Benchmark / signature workout detected</p>
-    </div>
-    )}
+      {hasBenchmark && (
+        <div className="rounded-xl bg-orange-100 p-3 text-gray-900 dark:bg-orange-950 dark:text-orange-100">
+          <p className="font-semibold">Benchmark</p>
+          <p>Benchmark / signature workout detected</p>
+        </div>
+      )}
 
-    {!isStrengthOnly && (
-    <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
-        <p className="font-semibold">Tread</p>
-        <p>{treadType}</p>
-    </div>
-    )}
+      {!isStrengthOnly && (
+        <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
+          <p className="font-semibold">Tread</p>
+          <p>{treadType}</p>
+        </div>
+      )}
 
-    {!isTreadOnly && (
-    <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
-        <p className="font-semibold">Floor</p>
-        <p>{floorType}</p>
-    </div>
-    )}
-
+      {!isTreadOnly && (
+        <div className="rounded-xl bg-gray-100 p-3 text-gray-900 dark:bg-zinc-900 dark:text-zinc-100">
+          <p className="font-semibold">Floor</p>
+          <p>{floorType}</p>
+        </div>
+      )}
     </div>
   );
 }
 
 export function WorkoutSelector({ workouts }: Props) {
-  const [selectedId, setSelectedId] = useState(workouts[0]?.id);
+  const groupedByDate = useMemo(() => {
+    const map = new Map<string, WorkoutPost[]>();
 
-  const selected = workouts.find((w) => w.id === selectedId) ?? workouts[0];
+    for (const workout of workouts) {
+      const dateLabel = getDateLabel(workout.title);
+      const existing = map.get(dateLabel) ?? [];
+      existing.push(workout);
+      map.set(dateLabel, existing);
+    }
 
-  if (!selected) {
+    return Array.from(map.entries()).map(([dateLabel, items]) => ({
+      dateLabel,
+      items,
+    }));
+  }, [workouts]);
+
+  const [selectedDateIndex, setSelectedDateIndex] = useState(0);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+
+  const selectedDateGroup = groupedByDate[selectedDateIndex];
+
+  const selected =
+    selectedDateGroup?.items.find((item) => item.id === selectedWorkoutId) ??
+    selectedDateGroup?.items[0];
+
+  function goPrevious() {
+    setSelectedDateIndex((current) =>
+      Math.min(current + 1, groupedByDate.length - 1),
+    );
+  }
+
+  function goNext() {
+    setSelectedDateIndex((current) => Math.max(current - 1, 0));
+  }
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "ArrowLeft") goPrevious();
+      if (e.key === "ArrowRight") goNext();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [groupedByDate.length]);
+
+  if (!selected || !selectedDateGroup) {
     return <p>No workout post found yet.</p>;
   }
 
-  const parsed = parseWorkoutMarkdown(selected.title, selected.selftext, selected.workout_type);
+  const parsed = parseWorkoutMarkdown(
+    selected.title,
+    selected.selftext,
+    selected.workout_type,
+  );
 
   return (
     <>
-      <select
-        className="
-        mt-6
-        w-full
-        rounded-xl
-        border
-        border-zinc-300
-        bg-white
-        p-3
-        text-sm
-        text-zinc-900
-        dark:border-zinc-700
-        dark:bg-zinc-900
-        dark:text-zinc-100
-    "
-        value={selected.id}
-        onChange={(e) => setSelectedId(e.target.value)}
-      >
-        {workouts.map((workout) => (
-          <option key={workout.id} value={workout.id}>
-            {workout.workout_type ?? "Workout"} · {workout.title}
-          </option>
-        ))}
-      </select>
+      <div className="mt-6 flex items-center justify-center gap-4">
+        <button
+          onClick={goPrevious}
+          disabled={selectedDateIndex >= groupedByDate.length - 1}
+          className="rounded-full border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ←
+        </button>
+
+        <button className="rounded-xl border px-5 py-2 font-semibold">
+          {selectedDateGroup.dateLabel}
+        </button>
+
+        <button
+          onClick={goNext}
+          disabled={selectedDateIndex <= 0}
+          className="rounded-full border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          →
+        </button>
+      </div>
+
+    {selectedDateGroup.items.map((workout) => {
+    const type = workout.workout_type ?? "Workout";
+    const isSelected = workout.id === selected?.id;
+
+    return (
+        <button
+        key={workout.id}
+        onClick={() => setSelectedWorkoutId(workout.id)}
+        className={`rounded-full px-4 py-2 text-sm ${
+            isSelected
+            ? "bg-orange-500 text-white"
+            : "bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
+        }`}
+        >
+        {type}
+        </button>
+    );
+    })}
 
       <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <h1 className="text-3xl font-bold">{parsed.title}</h1>
 
         <WorkoutQuickSummary
-        markdown={selected.selftext}
-        workoutType={selected.workout_type}
+          markdown={selected.selftext}
+          workoutType={selected.workout_type}
         />
 
-        <p className="mt-4 text-xs text-gray-400">
-          Source: u/{selected.author}
-        </p>
+        <p className="mt-4 text-xs text-gray-400">Source: u/{selected.author}</p>
       </section>
 
-        {parsed.tabs.length > 0 ? (
+      {parsed.tabs.length > 0 ? (
         <WorkoutTabs tabs={parsed.tabs} />
-        ) : (
+      ) : (
         <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="text-xl font-semibold">Raw workout text</h2>
-            <div className="prose prose-sm mt-4 max-w-none dark:prose-invert">
+          <h2 className="text-xl font-semibold">Raw workout text</h2>
+          <div className="prose prose-sm mt-4 max-w-none dark:prose-invert">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {selected.selftext}
+              {selected.selftext}
             </ReactMarkdown>
-            </div>
+          </div>
         </section>
-        )}
-
+      )}
     </>
   );
 }

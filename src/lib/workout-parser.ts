@@ -46,8 +46,17 @@ function removeDuplicateHeader(content: string, title: string) {
     const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
     return content
-        .replace(new RegExp(`^\\*\\*${escaped}\\*\\*\\s*`, "i"), "")
-        .replace(new RegExp(`^#+\\s*${escaped}\\s*`, "i"), "")
+        .replace(
+            new RegExp(`^\\s*(?:\\*\\*)?${escaped}(?:\\*\\*)?\\s*\\n?`, "i"),
+            "",
+        )
+        .trim();
+}
+
+function cleanBlockContentStart(content: string) {
+    return content
+        .replace(/^\s*,\s*/, "")
+        .replace(/^\s*[-–:]\s*/, "")
         .trim();
 }
 
@@ -88,6 +97,128 @@ function splitBlockContentAndCommentary(content: string) {
     };
 }
 
+function extractWorkoutName(commentBody: string, fallback = "Workout Intel") {
+    const h1Match = commentBody.match(/^#\s+(.+)$/m);
+    if (h1Match?.[1]) return h1Match[1].trim();
+
+    const boldTypeMatch = commentBody.match(
+        /^\s*\*\*\s*(2G|3G|Tread\s*50|Strength\s*50)\s*\*\*/im,
+    );
+    if (boldTypeMatch?.[1]) return boldTypeMatch[1].trim();
+
+    const plainTypeMatch = commentBody.match(
+        /^\s*(2G|3G|Tread\s*50|Strength\s*50)\b/im,
+    );
+    if (plainTypeMatch?.[1]) return plainTypeMatch[1].trim();
+
+    return fallback;
+}
+
+function stripLeadingWorkoutHeader(body: string) {
+    return body
+        .replace(/^#\s+.+\n+/m, "")
+        .replace(
+            /^\s*\*\*\s*(2G|3G|Tread\s*50|Strength\s*50)\s*\*\*\s*\n+/im,
+            "",
+        )
+        .replace(/^\s*(2G|3G|Tread\s*50|Strength\s*50)\s*[-:]?\s*\n+/im, "")
+        .trim();
+}
+
+function cleanDanglingMarkdown(text: string) {
+    return (
+        text
+            // Remove lines that are only "**"
+            .replace(/^\s*\*\*\s*$/gm, "")
+            // Remove only truly dangling opening ** at start of line
+            .replace(/^\s*\*\*\s+(?!(?:OR|Finisher)\b)/gim, "")
+            .trim()
+    );
+}
+
+function normalizeLinesAsBullets(text: string) {
+    const lines = text
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    const hasMarkdownFormatting = /\*\*.+\*\*/.test(text);
+    const alreadyHasBullets = lines.some((line) => /^[-*]\s+/.test(line));
+
+    if (alreadyHasBullets || hasMarkdownFormatting) return text;
+
+    let previousEndedWithColon = false;
+
+    return lines
+        .map((line) => {
+            const isHeading =
+                /^3 blocks, all the same/i.test(line) ||
+                /^as many rounds/i.test(line) ||
+                /^repeat/i.test(line);
+
+            if (/^finisher/i.test(line)) {
+                previousEndedWithColon = false;
+                return `**${line}**`;
+            }
+
+            if (isHeading) {
+                previousEndedWithColon = line.endsWith(":");
+                return line;
+            }
+
+            const prefix = previousEndedWithColon ? "  - " : "- ";
+            previousEndedWithColon = line.endsWith(":");
+
+            return `${prefix}${line}`;
+        })
+        .join("\n");
+}
+
+function splitIntoBlocks(
+    content: string,
+    defaultTitle: string,
+): WorkoutBlock[] {
+    const cleaned = cleanDanglingMarkdown(content);
+
+    const blockRegex = /(?:^|\n)\s*(Block\s+\d+\s*(?:[-–:][^\n]*)?)/gi;
+    const matches = [...cleaned.matchAll(blockRegex)];
+
+    if (matches.length === 0) {
+        return [
+            {
+                title: defaultTitle,
+                content: normalizeLinesAsBullets(cleaned),
+            },
+        ];
+    }
+
+    const blocks: WorkoutBlock[] = [];
+
+    const intro = cleaned.slice(0, matches[0].index).trim();
+    if (intro) {
+        blocks.push({
+            title: defaultTitle,
+            content: normalizeLinesAsBullets(intro),
+        });
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        const start = match.index ?? 0;
+        const contentStart = start + match[0].length;
+        const end = matches[i + 1]?.index ?? cleaned.length;
+
+        blocks.push({
+            title: match[1].trim(),
+            content: normalizeLinesAsBullets(
+                cleanBlockContentStart(cleaned.slice(contentStart, end).trim()),
+            ),
+        });
+    }
+
+    return blocks;
+}
+
 function parseSimpleSections(body: string): WorkoutTab[] {
     const tabs: Record<WorkoutTabType, WorkoutTab> = {
         overview: { type: "overview", label: "Overview", blocks: [] },
@@ -97,10 +228,10 @@ function parseSimpleSections(body: string): WorkoutTab[] {
         commentary: { type: "commentary", label: "Commentary", blocks: [] },
     };
 
-    const sectionRegex =
-        /(?:^|\n)\s*(?:\*\*)?(Tread|Treadmill|Rower|Row|Floor)(?:\*\*)?\s*[:-]\s*/gi;
+    const stationRegex =
+        /(?:^|\n)\s*(?:\*\*)?\s*(Tread|Treadmill|Rower|Row|Floor)\s*(?:\*\*)?\s*:\s*/gi;
 
-    const matches = [...body.matchAll(sectionRegex)];
+    const matches = [...body.matchAll(stationRegex)];
 
     if (matches.length === 0) {
         return [];
@@ -108,7 +239,8 @@ function parseSimpleSections(body: string): WorkoutTab[] {
 
     const firstIndex = matches[0].index ?? 0;
 
-    const overview = body.slice(0, firstIndex).trim();
+    const overview = cleanDanglingMarkdown(body.slice(0, firstIndex).trim());
+
     if (overview) {
         tabs.overview.blocks.push({
             title: "Overview",
@@ -118,32 +250,34 @@ function parseSimpleSections(body: string): WorkoutTab[] {
 
     for (let i = 0; i < matches.length; i++) {
         const match = matches[i];
-        const start = match.index ?? 0;
-        const contentStart = start + match[0].length;
-        const end = matches[i + 1]?.index ?? body.length;
 
-        const label = match[1].toLowerCase();
-        const content = body.slice(contentStart, end).trim();
+        const headerStart = match.index ?? 0;
+        const contentStart = headerStart + match[0].length;
+        const contentEnd = matches[i + 1]?.index ?? body.length;
 
-        const type: WorkoutTabType = label.includes("tread")
+        const stationName = match[1].toLowerCase();
+        const content = cleanDanglingMarkdown(
+            body.slice(contentStart, contentEnd).trim(),
+        );
+
+        const type: WorkoutTabType = stationName.includes("tread")
             ? "tread"
-            : label.includes("row")
+            : stationName.includes("row")
               ? "rower"
-              : label.includes("floor")
+              : stationName.includes("floor")
                 ? "floor"
                 : "commentary";
 
-        tabs[type].blocks.push({
-            title:
-                type === "tread"
-                    ? "Tread"
-                    : type === "rower"
-                      ? "Rower"
-                      : type === "floor"
-                        ? "Floor"
-                        : "Notes",
-            content,
-        });
+        const title =
+            type === "tread"
+                ? "Tread"
+                : type === "rower"
+                  ? "Rower"
+                  : type === "floor"
+                    ? "Floor"
+                    : "Notes";
+
+        tabs[type].blocks.push(...splitIntoBlocks(content, title));
     }
 
     return Object.values(tabs).filter((tab) => tab.blocks.length > 0);
@@ -157,23 +291,23 @@ export function parseWorkoutMarkdown(
     const dateMatch = postTitle.match(/for\s+(.+)$/i);
     const dateLabel = dateMatch?.[1]?.trim() ?? "";
 
-    const headerMatch = commentBody.match(/^#\s+(.+)$/m);
-    const workoutName = headerMatch?.[1]?.trim() ?? "Workout Intel";
+    // **3G**\n\n\n**Tread:**\n\n3 blocks, all the same:
+    const workoutName = extractWorkoutName(commentBody);
 
-    const title = dateLabel ? `${workoutName} for ${dateLabel}` : workoutName;
+    const title = workoutName
+        .replace(/\bintel\b/i, "")
+        .replace(/\bfor\s+.+$/i, "")
+        .trim();
 
     const body = cleanSpoilerGarbage(
-        commentBody
-            .replace(/^#\s+.+\n+/m, "")
-            // .replace(/^[A-Za-z0-9_ -]*commentary:\s*/gim, "")
-            .trim(),
+        cleanDanglingMarkdown(stripLeadingWorkoutHeader(commentBody)),
     );
 
     const normalizedType = workoutType?.toLowerCase();
 
     if (normalizedType === "tread 50") {
         return {
-            title: dateLabel ? `Tread 50 for ${dateLabel}` : "Tread 50",
+            title: "Tread 50",
             dateLabel,
             tabs: [
                 {
@@ -192,7 +326,7 @@ export function parseWorkoutMarkdown(
 
     if (normalizedType === "strength 50") {
         return {
-            title: dateLabel ? `Strength 50 for ${dateLabel}` : "Strength 50",
+            title: "Strength 50",
             dateLabel,
             tabs: [
                 {
@@ -218,7 +352,7 @@ export function parseWorkoutMarkdown(
         : body;
 
     const sectionRegex =
-        /\*\*((?:Tread|Treadmill|Floor|Rower|Row)\s+Block\s+\d+\s+-\s+.*?)\*\*/gi;
+        /(?:^|\n)\s*(?:\*\*)?((?:Tread|Treadmill|Floor|Rower|Row)\s+Block\s+\d+\s*(?:[-–:]\s*[^\n*]+)?)(?:\*\*)?/gi;
 
     const matches = [...bodyWithoutCommentary.matchAll(sectionRegex)];
 
@@ -235,7 +369,7 @@ export function parseWorkoutMarkdown(
     if (firstBlockIndex > 0) {
         tabs.overview.blocks.push({
             title: "Overview",
-            content: body.slice(0, firstBlockIndex).trim(),
+            content: bodyWithoutCommentary.slice(0, firstBlockIndex).trim(),
         });
     }
 
@@ -253,20 +387,10 @@ export function parseWorkoutMarkdown(
             blockTitle,
         );
 
-        const { blockContent, commentaryContent } =
-            splitBlockContentAndCommentary(contentWithoutHeader);
-
         tabs[type].blocks.push({
             title: blockTitle,
-            content: blockContent,
+            content: cleanBlockContentStart(contentWithoutHeader),
         });
-
-        if (commentaryContent) {
-            tabs.commentary.blocks.push({
-                title: "",
-                content: cleanSpoilerGarbage(commentaryContent),
-            });
-        }
     }
 
     if (commentaryMatch?.[1]) {
@@ -300,8 +424,16 @@ export function parseWorkoutMarkdown(
 
     let finalTabs = Object.values(tabs).filter((tab) => tab.blocks.length > 0);
 
-    if (finalTabs.length === 0) {
-        finalTabs = parseSimpleSections(body);
+    const hasWorkoutStationTabs = finalTabs.some((tab) =>
+        ["tread", "floor", "rower"].includes(tab.type),
+    );
+
+    if (!hasWorkoutStationTabs) {
+        const simpleTabs = parseSimpleSections(body);
+
+        if (simpleTabs.length > 0) {
+            finalTabs = simpleTabs;
+        }
     }
 
     return {
